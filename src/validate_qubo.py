@@ -1,178 +1,288 @@
-
-from itertools import combinations
+from itertools import product
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-from qubo_model import build_qubo
+from qubo_model import (
+    MIN_ASSETS,
+    MAX_ASSETS,
+    build_qubo,
+)
 
+
+# ============================================================
+# Configuration
+# ============================================================
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-RETURNS_FILE = PROJECT_ROOT / "data" / "daily_returns.csv"
+DATA_DIR = PROJECT_ROOT / "data"
+OUTPUT_FILE = DATA_DIR / "qubo_validation.csv"
 
-ASSETS_TO_SELECT = 4
-TRADING_DAYS = 252
+RANDOM_ASSIGNMENTS = 1000
+RANDOM_SEED = 2026
+MAX_SLACK_BITS_FOR_EXHAUSTIVE_SEARCH = 12
+TOLERANCE = 1e-9
 
 
-def load_returns():
-    data = pd.read_csv(RETURNS_FILE)
+# ============================================================
+# Helpers
+# ============================================================
 
-    date_columns = [
-        column
-        for column in data.columns
-        if str(column).strip().lower()
-        in ("date", "datetime", "timestamp")
+def original_objective(bits, covariance):
+    """Evaluate x.T @ covariance @ x for binary asset variables."""
+
+    bits = np.asarray(bits, dtype=float)
+    return float(bits @ covariance @ bits)
+
+
+def get_variable_names(qubo):
+    """Return converted QUBO variable names in their actual order."""
+
+    return [variable.name for variable in qubo.variables]
+
+
+def find_best_slack_assignment(qubo, asset_bits, asset_count):
+    """
+    Find the lowest QUBO energy over all auxiliary-bit assignments.
+
+    This is practical only when the number of slack variables is small.
+    The function does not allocate a dense matrix.
+    """
+
+    variable_names = get_variable_names(qubo)
+
+    asset_positions = {
+        name: index
+        for index, name in enumerate(variable_names)
+        if name in asset_bits
+    }
+
+    if len(asset_positions) != asset_count:
+        missing = sorted(set(asset_bits) - set(asset_positions))
+        raise ValueError(
+            "Could not map every asset variable into the converted QUBO. "
+            f"Missing: {missing}"
+        )
+
+    slack_positions = [
+        index
+        for index, name in enumerate(variable_names)
+        if name not in asset_bits
     ]
 
-    data = data.drop(columns=date_columns)
-    data = data.select_dtypes(include=[np.number])
-    data = data.dropna(axis=0, how="any")
+    if len(slack_positions) > MAX_SLACK_BITS_FOR_EXHAUSTIVE_SEARCH:
+        raise ValueError(
+            f"Found {len(slack_positions)} slack variables. "
+            "Exhaustive slack search is limited to "
+            f"{MAX_SLACK_BITS_FOR_EXHAUSTIVE_SEARCH} bits."
+        )
 
-    return data
+    full_bits = np.zeros(len(variable_names), dtype=float)
 
+    for asset, bit in asset_bits.items():
+        full_bits[variable_names.index(asset)] = bit
+
+    best_energy = float("inf")
+    best_full_bits = None
+
+    # Search all auxiliary-bit combinations, not all asset portfolios.
+    for slack_values in product(
+        (0.0, 1.0),
+        repeat=len(slack_positions),
+    ):
+        candidate = full_bits.copy()
+
+        for position, bit in zip(slack_positions, slack_values):
+            candidate[position] = bit
+
+        energy = float(qubo.objective.evaluate(candidate))
+
+        if energy < best_energy:
+            best_energy = energy
+            best_full_bits = candidate.copy()
+
+    return best_energy, best_full_bits, len(slack_positions)
+
+
+# ============================================================
+# Main validation
+# ============================================================
 
 def main():
-    print("=" * 65)
-    print("QUANTUMRISK: QUBO MATHEMATICAL VALIDATION")
-    print("=" * 65)
+    print("=" * 68)
+    print("QUANTUMRISK: VARIABLE-SIZE QUBO VALIDATION")
+    print("=" * 68)
 
-    # Build the exact same model used by QAOA.
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
     original_problem, qubo, assets, covariance = build_qubo()
 
-    returns = load_returns()
-    assets = list(returns.columns)
+    asset_count = len(assets)
+    variable_names = get_variable_names(qubo)
 
-    # Respect the variable order in the converted QUBO.
-    qubo_variables = [variable.name for variable in qubo.variables]
+    if covariance.shape != (asset_count, asset_count):
+        raise ValueError("Covariance matrix dimensions do not match assets.")
 
-    if set(qubo_variables) != set(assets):
+    if not np.isfinite(covariance).all():
+        raise ValueError("Covariance matrix contains non-finite values.")
+
+    if not np.allclose(covariance, covariance.T, atol=1e-10):
+        raise ValueError("Covariance matrix is not symmetric.")
+
+    asset_set = set(assets)
+
+    if not asset_set.issubset(set(variable_names)):
         raise ValueError(
-            "QUBO variables differ from the asset columns. "
-            f"QUBO: {qubo_variables}; assets: {assets}"
+            "The converted QUBO does not contain every asset variable."
         )
 
-    covariance = returns.cov().to_numpy()
-    asset_indices = {asset: i for i, asset in enumerate(assets)}
+    slack_count = len(variable_names) - asset_count
 
-    results = []
+    print(f"\nAvailable assets: {asset_count}")
+    print(f"Allowed portfolio sizes: {MIN_ASSETS}–{MAX_ASSETS}")
+    print(f"Original asset variables: {asset_count}")
+    print(f"Converted QUBO variables: {len(variable_names)}")
+    print(f"Auxiliary slack variables: {slack_count}")
+    print(f"Random asset selections: {RANDOM_ASSIGNMENTS}")
 
-    # Enumerate every feasible four-asset portfolio.
-    for selected in combinations(assets, ASSETS_TO_SELECT):
-        selected_set = set(selected)
+    if slack_count > MAX_SLACK_BITS_FOR_EXHAUSTIVE_SEARCH:
+        raise ValueError(
+            f"Cannot exhaustively test {slack_count} slack bits with "
+            f"the configured limit of "
+            f"{MAX_SLACK_BITS_FOR_EXHAUSTIVE_SEARCH}."
+        )
 
-        # Binary vector in the original asset order.
-        x = np.array(
-            [1 if asset in selected_set else 0 for asset in assets],
+    rng = np.random.default_rng(RANDOM_SEED)
+
+    records = []
+    seen = set()
+
+    for trial in range(RANDOM_ASSIGNMENTS):
+        # Draw a random portfolio size within the permitted range.
+        size = int(rng.integers(MIN_ASSETS, MAX_ASSETS + 1))
+
+        selected_indices = rng.choice(
+            asset_count,
+            size=size,
+            replace=False,
+        )
+
+        selected_indices = sorted(selected_indices.tolist())
+        selected = [assets[index] for index in selected_indices]
+
+        # Avoid duplicate portfolios where practical.
+        key = tuple(selected)
+
+        if key in seen:
+            continue
+
+        seen.add(key)
+
+        asset_bits = {
+            asset: int(asset in selected)
+            for asset in assets
+        }
+
+        bits = np.array(
+            [asset_bits[asset] for asset in assets],
             dtype=float,
         )
 
-        # Binary vector in the QUBO's variable order.
-        qubo_x = np.array(
-            [
-                1 if variable in selected_set else 0
-                for variable in qubo_variables
-            ],
-            dtype=float,
+        direct_objective = original_objective(bits, covariance)
+
+        # The original QP objective is x.T Sigma x.
+        # This differs from equal-weight variance when portfolio size
+        # varies, because equal-weight variance divides by size**2.
+        equal_weight_variance = (
+            direct_objective / (size ** 2)
         )
 
-        # Direct covariance-based portfolio variance.
-        # Equal weight = 1/4 for each selected asset.
-        direct_variance = float(
-            x @ covariance @ x / ASSETS_TO_SELECT**2
+        best_energy, best_full_bits, _ = find_best_slack_assignment(
+            qubo=qubo,
+            asset_bits=asset_bits,
+            asset_count=asset_count,
         )
 
-        # Energy evaluated using Qiskit's converted QUBO.
-        qubo_energy = float(qubo.objective.evaluate(qubo_x))
+        record = {
+            "trial": trial + 1,
+            "assets": ", ".join(selected),
+            "number_of_assets": size,
+            "feasible_by_size": MIN_ASSETS <= size <= MAX_ASSETS,
+            "direct_quadratic_objective": direct_objective,
+            "equal_weight_daily_variance": equal_weight_variance,
+            "minimum_energy_over_slack": best_energy,
+            "energy_minus_direct_objective": (
+                best_energy - direct_objective
+            ),
+            "slack_assignment": ", ".join(
+                f"{variable_names[index]}={int(best_full_bits[index])}"
+                for index in range(len(variable_names))
+                if variable_names[index] not in asset_set
+            ),
+        }
 
-        results.append(
-            {
-                "assets": ", ".join(selected),
-                "direct_variance": direct_variance,
-                "qubo_energy": qubo_energy,
-                "difference": qubo_energy - direct_variance,
-            }
-        )
+        records.append(record)
 
-    results_df = pd.DataFrame(results)
+        if (trial + 1) % 100 == 0:
+            print(f"Processed {trial + 1}/{RANDOM_ASSIGNMENTS} trials...")
 
-    # Compare the ranking of all feasible portfolios.
-    variance_ranking = results_df["direct_variance"].rank(
-        method="min"
-    )
-    qubo_ranking = results_df["qubo_energy"].rank(
-        method="min"
-    )
+    results = pd.DataFrame(records)
 
-    max_abs_difference = results_df["difference"].abs().max()
+    if results.empty:
+        raise RuntimeError("No validation records were generated.")
 
-    # A constant energy offset is allowed because it doesn't change
-    # the ranking or the minimizing portfolio.
-    energy_offsets = (
-        results_df["qubo_energy"]
-        - results_df["direct_variance"]
-    )
-    offset_spread = energy_offsets.max() - energy_offsets.min()
+    # For feasible assignments, the constraint penalties should be
+    # satisfiable by the auxiliary bits. A constant energy offset is
+    # acceptable because it does not change objective rankings.
+    feasible_results = results[
+        results["feasible_by_size"]
+    ].copy()
 
-    variance_winner = results_df.loc[
-        results_df["direct_variance"].idxmin()
-    ]
-    qubo_winner = results_df.loc[
-        results_df["qubo_energy"].idxmin()
-    ]
+    if feasible_results.empty:
+        raise RuntimeError("No feasible selections were sampled.")
 
-    same_winner = set(variance_winner["assets"].split(", ")) == set(
-        qubo_winner["assets"].split(", ")
-    )
+    offsets = feasible_results["energy_minus_direct_objective"]
 
-    same_ranking = variance_ranking.equals(qubo_ranking)
+    offset_spread = float(offsets.max() - offsets.min())
+    maximum_absolute_offset = float(offsets.abs().max())
 
-    print(f"\nAssets: {len(assets)}")
-    print(f"Feasible portfolios checked: {len(results_df)}")
-    print(f"Expected combinations: {len(list(combinations(assets, 4)))}")
+    results.to_csv(OUTPUT_FILE, index=False)
 
-    print("\n--- MINIMUM BY DIRECT VARIANCE ---")
-    print(f"Assets: {variance_winner['assets']}")
-    print(f"Daily variance: {variance_winner['direct_variance']:.12g}")
+    print("\n" + "=" * 68)
+    print("VALIDATION SUMMARY")
+    print("=" * 68)
 
-    print("\n--- MINIMUM BY QUBO ENERGY ---")
-    print(f"Assets: {qubo_winner['assets']}")
-    print(f"QUBO energy: {qubo_winner['qubo_energy']:.12g}")
+    print(f"Unique portfolios tested: {len(results)}")
+    print(f"Feasible portfolios tested: {len(feasible_results)}")
+    print(f"Slack variables: {slack_count}")
 
-    print("\n--- VALIDATION CHECKS ---")
     print(
-        "Maximum absolute energy difference: "
-        f"{max_abs_difference:.12g}"
+        "Maximum absolute energy/objective difference: "
+        f"{maximum_absolute_offset:.12g}"
     )
     print(
-        "Spread of (QUBO energy - variance): "
+        "Spread of energy-minus-objective across feasible samples: "
         f"{offset_spread:.12g}"
     )
-    print(f"Same minimizing portfolio: {same_winner}")
-    print(f"Same complete ranking: {same_ranking}")
 
-    # Save the detailed results for inspection.
-    output_path = PROJECT_ROOT / "data" / "qubo_validation.csv"
-    results_df.sort_values("direct_variance").to_csv(
-        output_path, index=False
-    )
-
-    print(f"\nDetailed results saved to: {output_path}")
-
-    if offset_spread < 1e-10 and same_winner:
-        print("\nPASS: QUBO energy matches variance up to a constant offset.")
-    elif same_winner:
+    if offset_spread <= TOLERANCE:
         print(
-            "\nPARTIAL PASS: Both objectives select the same winner, "
-            "but inspect the energy differences and ranking."
+            "\nPASS: Feasible sampled portfolios have a constant "
+            "QUBO energy offset relative to the original objective."
         )
     else:
         print(
-            "\nCHECK REQUIRED: The QUBO and direct variance objectives "
-            "select different portfolios."
+            "\nWARNING: The sampled feasible portfolios do not show "
+            "a constant energy offset. Inspect the penalty encoding."
         )
+
+    print("\nInterpretation:")
+    print("- This is a sampled validation, not a global-optimum proof.")
+    print("- It does not prove that the penalty is sufficiently strong.")
+    print("- It does not establish equal-weight variance optimality.")
+    print(f"\nDetailed results saved to: {OUTPUT_FILE}")
 
 
 if __name__ == "__main__":
     main()
-

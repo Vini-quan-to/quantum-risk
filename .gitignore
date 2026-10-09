@@ -15,3 +15,5 @@ aer_error.txt
 .DS_Store
 Thumbs.db
 .vscode/
+# Large generated benchmark output
+data/benchmark_results.csv

@@ -1,0 +1,2 @@
+asset_count,selection_count,requested_runs,completed_runs,failed_runs,feasible_runs,feasibility_rate,exact_optimum_runs,exact_optimum_rate,exact_optimum_rate_among_feasible,mean_relative_variance_gap,best_daily_variance,mean_daily_variance,mean_runtime_seconds,runtime_std_seconds,shots,reps,max_iterations,base_seed
+8,4,10,10,0,9,0.9,9,0.9,1.0,0.0,5.1155021154694215e-05,5.1155021154694215e-05,0.5230687000002945,0.08095681073530726,1024,1,50,2026
