@@ -1,3 +1,4 @@
+
 from pathlib import Path
 
 import numpy as np
@@ -38,7 +39,8 @@ def load_returns():
     returns = pd.read_csv(RETURNS_FILE)
 
     date_columns = [
-        column for column in returns.columns
+        column
+        for column in returns.columns
         if str(column).strip().lower()
         in {"date", "datetime", "timestamp"}
     ]
@@ -49,21 +51,127 @@ def load_returns():
     returns = returns.dropna(axis=0, how="any")
 
     if returns.empty:
-        raise ValueError("The returns dataset has no valid observations.")
+        raise ValueError(
+            "The returns dataset has no valid observations."
+        )
 
     if returns.columns.duplicated().any():
-        raise ValueError("The returns dataset contains duplicate asset names.")
+        raise ValueError(
+            "The returns dataset contains duplicate asset names."
+        )
 
     if not np.isfinite(returns.to_numpy()).all():
-        raise ValueError("The returns dataset contains invalid values.")
+        raise ValueError(
+            "The returns dataset contains invalid values."
+        )
 
-    if not (1 <= MIN_ASSETS <= MAX_ASSETS <= returns.shape[1]):
+    asset_count = returns.shape[1]
+
+    if not (1 <= MIN_ASSETS <= MAX_ASSETS <= asset_count):
         raise ValueError(
             f"Invalid selection limits: {MIN_ASSETS}–{MAX_ASSETS} "
-            f"for {returns.shape[1]} available assets."
+            f"for {asset_count} available assets."
+        )
+
+    if len(returns) < 2:
+        raise ValueError(
+            "At least two valid return observations are required."
         )
 
     return returns
+
+
+# ============================================================
+# Covariance matrix
+# ============================================================
+
+def calculate_covariance(returns):
+    """Calculate a finite, symmetric sample covariance matrix."""
+
+    covariance = returns.cov().to_numpy(dtype=float)
+
+    if covariance.shape != (returns.shape[1], returns.shape[1]):
+        raise ValueError(
+            "Unexpected covariance matrix dimensions."
+        )
+
+    if not np.isfinite(covariance).all():
+        raise ValueError(
+            "The covariance matrix contains invalid values."
+        )
+
+    # Remove tiny floating-point asymmetries.
+    covariance = (covariance + covariance.T) / 2.0
+
+    if np.max(np.abs(covariance)) <= 0:
+        raise ValueError(
+            "The covariance matrix has no positive scale."
+        )
+
+    return covariance
+
+
+# ============================================================
+# Objective evaluation
+# ============================================================
+
+def evaluate_covariance_objective(bits, covariance):
+    """
+    Evaluate the current QUBO objective: x.T @ covariance @ x.
+
+    This is an unnormalized selected-asset covariance objective.
+    It is NOT equal-weight portfolio variance when portfolio size
+    varies.
+
+    For a selected portfolio of size k, equal-weight variance is:
+
+        (x.T @ covariance @ x) / k**2
+
+    for k > 0.
+    """
+
+    bits = np.asarray(bits, dtype=float)
+
+    if bits.ndim != 1:
+        raise ValueError("Asset selection must be a one-dimensional array.")
+
+    if bits.size != covariance.shape[0]:
+        raise ValueError(
+            "Asset selection length does not match covariance dimensions."
+        )
+
+    if not np.isin(bits, [0.0, 1.0]).all():
+        raise ValueError("Asset selection must contain only binary values.")
+
+    return float(bits @ covariance @ bits)
+
+
+def evaluate_equal_weight_variance(bits, covariance):
+    """Evaluate the actual variance of an equal-weight selected portfolio."""
+
+    bits = np.asarray(bits, dtype=float)
+
+    if bits.ndim != 1:
+        raise ValueError("Asset selection must be a one-dimensional array.")
+
+    if bits.size != covariance.shape[0]:
+        raise ValueError(
+            "Asset selection length does not match covariance dimensions."
+        )
+
+    if not np.isin(bits, [0.0, 1.0]).all():
+        raise ValueError("Asset selection must contain only binary values.")
+
+    selected_count = int(bits.sum())
+
+    if selected_count == 0:
+        raise ValueError(
+            "Equal-weight variance is undefined for an empty portfolio."
+        )
+
+    return evaluate_covariance_objective(bits, covariance) / (
+        selected_count ** 2
+    )
 
 
 # ============================================================
@@ -75,39 +183,26 @@ def build_quadratic_program():
     Binary decision variable:
         x_i = 1 if asset i is selected, otherwise 0.
 
-    Objective:
+    Current objective:
         Minimize x.T @ covariance @ x.
 
     Constraints:
         MIN_ASSETS <= sum(x_i) <= MAX_ASSETS.
 
-    Note:
-        This is a covariance-based quadratic objective. Because the
-        portfolio size is variable, it is not normalized by the square
-        of the number of selected assets.
+    Important:
+        The current objective is not normalized by portfolio size.
+        Equal-weight variance requires division by selected_count**2.
+        That variable denominator requires a separate formulation.
     """
 
     returns = load_returns()
     assets = list(returns.columns)
-    covariance = returns.cov().to_numpy(dtype=float)
+    covariance = calculate_covariance(returns)
 
     asset_count = len(assets)
 
-    if covariance.shape != (asset_count, asset_count):
-        raise ValueError("Unexpected covariance matrix dimensions.")
-
-    if not np.isfinite(covariance).all():
-        raise ValueError("The covariance matrix contains invalid values.")
-
-    # Remove small numerical asymmetries.
-    covariance = (covariance + covariance.T) / 2.0
-
-    largest_covariance = float(np.max(np.abs(covariance)))
-
-    if largest_covariance <= 0:
-        raise ValueError("The covariance matrix has no positive scale.")
-
     # Scale the penalty relative to the covariance matrix and universe.
+    largest_covariance = float(np.max(np.abs(covariance)))
     penalty = (
         PENALTY_MULTIPLIER
         * largest_covariance
@@ -119,8 +214,9 @@ def build_quadratic_program():
     for asset in assets:
         qp.binary_var(name=asset)
 
-    # x.T @ covariance @ x:
-    # diagonal terms are linear for binary variables because x_i^2 = x_i.
+    # x.T @ covariance @ x.
+    # For binary variables, x_i**2 = x_i, so diagonal terms
+    # are represented as linear coefficients.
     linear = {
         assets[i]: float(covariance[i, i])
         for i in range(asset_count)
@@ -140,7 +236,6 @@ def build_quadratic_program():
         quadratic=quadratic,
     )
 
-    # Lower bound on the number of selected assets.
     qp.linear_constraint(
         linear={asset: 1.0 for asset in assets},
         sense=">=",
@@ -148,7 +243,6 @@ def build_quadratic_program():
         name="minimum_assets",
     )
 
-    # Upper bound on the number of selected assets.
     qp.linear_constraint(
         linear={asset: 1.0 for asset in assets},
         sense="<=",
@@ -164,7 +258,7 @@ def build_quadratic_program():
 # ============================================================
 
 def build_qubo():
-    """Convert the constrained quadratic program into an unconstrained QUBO."""
+    """Convert the constrained quadratic program into a QUBO."""
 
     qp, assets, covariance, penalty = build_quadratic_program()
 
@@ -186,10 +280,15 @@ def build_qubo():
     print(f"Maximum selected assets: {MAX_ASSETS}")
     print(f"Original asset variables: {len(assets)}")
     print(f"QUBO variables including slack: {qubo.get_num_vars()}")
+    print(f"Auxiliary variables: {qubo.get_num_vars() - len(assets)}")
     print(f"Penalty coefficient: {penalty:.8g}")
 
-    print("\nThe converted QUBO has no explicit constraints.")
-    print("The portfolio-size constraints are encoded using penalties.")
+    print("\nObjective: x.T @ covariance @ x")
+    print("Portfolio-size constraints are encoded as QUBO penalties.")
+    print(
+        "WARNING: This is not normalized equal-weight variance "
+        "for variable portfolio sizes."
+    )
 
     return qp, qubo, assets, covariance
 
@@ -200,11 +299,8 @@ def build_qubo():
 
 def validate_qubo():
     """
-    Validate the model structure and randomly test the original
-    portfolio-size constraints.
-
-    This deliberately avoids constructing a dense matrix or running
-    an exact eigensolver. Random tests are not an optimality proof.
+    Validate the model structure, objective evaluation, and random
+    portfolio-size feasibility. This is not a global-optimum proof.
     """
 
     qp, qubo, assets, covariance = build_qubo()
@@ -215,20 +311,24 @@ def validate_qubo():
     feasible_count = 0
     infeasible_count = 0
     sampled_objectives = []
+    sampled_equal_weight_variances = []
 
     print("\nRunning lightweight QUBO validation...")
     print(f"Random assignments to test: {RANDOM_ASSIGNMENTS}")
 
     for _ in range(RANDOM_ASSIGNMENTS):
-        # Sample the original asset variables only.
         bits = rng.integers(0, 2, size=asset_count)
         selected_count = int(bits.sum())
 
         if MIN_ASSETS <= selected_count <= MAX_ASSETS:
             feasible_count += 1
 
-            # Evaluate the original quadratic objective.
-            objective = float(bits @ covariance @ bits)
+            objective = evaluate_covariance_objective(
+                bits, covariance
+            )
+            equal_weight_variance = evaluate_equal_weight_variance(
+                bits, covariance
+            )
 
             if not np.isfinite(objective):
                 raise ValueError(
@@ -236,11 +336,32 @@ def validate_qubo():
                     "objective value."
                 )
 
+            if not np.isfinite(equal_weight_variance):
+                raise ValueError(
+                    "A sampled feasible portfolio has a non-finite "
+                    "equal-weight variance."
+                )
+
+            # Verify the relationship between the two quantities.
+            expected_variance = objective / (selected_count ** 2)
+
+            if not np.isclose(
+                equal_weight_variance,
+                expected_variance,
+                rtol=1e-10,
+                atol=1e-14,
+            ):
+                raise AssertionError(
+                    "Equal-weight variance calculation failed."
+                )
+
             sampled_objectives.append(objective)
+            sampled_equal_weight_variances.append(
+                equal_weight_variance
+            )
         else:
             infeasible_count += 1
 
-    # Confirm that the converted QUBO has finite objective coefficients.
     linear_coefficients = qubo.objective.linear.to_array()
     quadratic_coefficients = qubo.objective.quadratic.to_array()
 
@@ -263,23 +384,38 @@ def validate_qubo():
 
     if sampled_objectives:
         print(
-            "Lowest sampled feasible objective: "
+            "Lowest sampled covariance objective: "
             f"{min(sampled_objectives):.12g}"
         )
         print(
-            "Highest sampled feasible objective: "
+            "Highest sampled covariance objective: "
             f"{max(sampled_objectives):.12g}"
+        )
+        print(
+            "Lowest sampled equal-weight variance: "
+            f"{min(sampled_equal_weight_variances):.12g}"
+        )
+        print(
+            "Highest sampled equal-weight variance: "
+            f"{max(sampled_equal_weight_variances):.12g}"
         )
 
     print("\nModel checks passed:")
-    print("- Original asset variables are binary.")
+    print("- Asset-selection variables are binary.")
     print("- Minimum and maximum portfolio-size constraints exist.")
-    print("- Converted QUBO objective coefficients are finite.")
-    print("- Random feasible assignments satisfy the size limits.")
+    print("- Converted QUBO coefficients are finite.")
+    print("- Random feasible portfolios satisfy the size limits.")
+    print("- Equal-weight variance uses the selected portfolio size.")
 
-    print("\nImportant:")
-    print("Random sampling is not an optimality certificate.")
-    print("No exact eigensolver was run.")
+    print("\nLimitations:")
+    print("- Random sampling is not an optimality certificate.")
+    print("- Penalty strength has not been proven sufficient.")
+    print("- The QUBO objective is still unnormalized.")
+    print(
+        "- Equal-weight variance is evaluated for validation only; "
+        "it is not yet the optimized QUBO objective."
+    )
+
     print("\nLightweight validation completed successfully.")
 
     return qp, qubo, assets, covariance
