@@ -1,0 +1,17 @@
+﻿# Python cache and virtual environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Environment variables and secrets
+.env
+.env.*
+
+# Temporary debugging output
+aer_error.txt
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.vscode/
