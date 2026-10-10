@@ -1,0 +1,61 @@
+QuantumRisk — Variance vs CVaR comparison
+================================================
+
+This report summarizes existing CSV outputs. It does not rerun optimizers.
+Quantum entries refer to classical statevector/QAOA-style simulations,
+not execution on quantum hardware.
+
+Classical minimum variance
+--------------------------
+Source file: classical_k4_results.csv
+Portfolio: XLP, HYG, LQD, AGG
+Modal probability: n/a
+Daily variance: 1.347280908e-05
+Historical VaR loss: 0.5885%
+Historical CVaR loss: 0.8109%
+Expected daily variance: n/a
+Expected CVaR loss: n/a
+Notes: Minimum variance in classical_k4_results.csv.
+
+Classical minimum CVaR
+----------------------
+Source file: classical_cvar_results.csv
+Portfolio: XLP, HYG, LQD, AGG
+Modal probability: n/a
+Daily variance: 1.347280908e-05
+Historical VaR loss: 0.5885%
+Historical CVaR loss: 0.8109%
+Expected daily variance: n/a
+Expected CVaR loss: n/a
+Notes: Minimum cvar in classical_cvar_results.csv.
+
+Quantum variance simulation (modal)
+-----------------------------------
+Source file: quantum_portfolio_results_p2_refined.csv
+Portfolio: EFA, TLT, HYG, AGG
+Modal probability: 0.4007%
+Daily variance: 2.379506788e-05
+Historical VaR loss: n/a
+Historical CVaR loss: n/a
+Expected daily variance: 4.363443702e-05
+Expected CVaR loss: n/a
+Notes: Modal portfolio; expected metrics use normalized CSV probabilities.
+
+Quantum CVaR simulation (modal)
+-------------------------------
+Source file: quantum_cvar_portfolio_results.csv
+Portfolio: EFA, TLT, USO, XLP
+Modal probability: 0.5140%
+Daily variance: 4.445076483e-05
+Historical VaR loss: 0.9209%
+Historical CVaR loss: 1.3151%
+Expected daily variance: 4.388131598e-05
+Expected CVaR loss: 1.4118%
+Notes: Modal portfolio; expected metrics use normalized CSV probabilities.
+
+Interpretation notes
+--------------------
+- Classical rows show the minimum objective found in the corresponding full-result CSV.
+- Quantum rows show the highest-probability (modal) portfolio and expected metrics if available.
+- Compare CVaR only with CVaR and variance only with variance; their numerical scales differ.
+- Historical estimates are in-sample and do not guarantee future performance.
