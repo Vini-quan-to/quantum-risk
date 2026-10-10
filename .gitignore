@@ -17,3 +17,10 @@ Thumbs.db
 .vscode/
 # Large generated benchmark output
 data/benchmark_results.csv
+
+
+# Generated datasets and experiment outputs
+data/*.csv
+
+# Keep lightweight project data in Git if needed
+!data/README.md
