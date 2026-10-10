@@ -1,0 +1,27 @@
+QuantumRisk — Classical Historical CVaR Baseline
+====================================================
+Assets: 20
+Observations: 758
+Portfolio size: 4 (equal weights)
+Feasible portfolios evaluated: 4,845
+Confidence level: 95%
+Loss convention: loss = -daily portfolio return; positive values mean losses.
+VaR: linear empirical quantile at the confidence level.
+CVaR convention: mean of historical losses greater than or equal to VaR.
+Ties at VaR may cause the tail to contain more than exactly 5% of observations.
+
+Minimum-CVaR portfolio:
+  Assets: XLP, HYG, LQD, AGG
+  CVaR loss: 0.008108726493
+  VaR loss: 0.005884533208
+  Mean daily return: 0.0002762062889
+  Daily variance: 1.347280908e-05
+  Worst daily loss: 0.01446371351
+
+Minimum-variance portfolio:
+  Assets: XLP, HYG, LQD, AGG
+  Daily variance: 1.347280908e-05
+  CVaR loss: 0.008108726493
+  VaR loss: 0.005884533208
+
+Interpretation: this is an in-sample historical estimate, not a guarantee of future risk.

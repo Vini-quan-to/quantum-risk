@@ -25,16 +25,20 @@ from scipy.optimize import minimize
 
 # ----------------------------- Configuration -------------------------------
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parent
 RETURNS_FILE = PROJECT_ROOT / "data" / "daily_returns.csv"
-RESULTS_FILE = PROJECT_ROOT / "data" / "quantum_portfolio_results.csv"
+RESULTS_FILE = PROJECT_ROOT / "data" / "quantum_portfolio_results_p2_refined.csv"
+RESTART_LOG_FILE = PROJECT_ROOT / "data" / "quantum_optimizer_p2_refined_log.csv"
+PARAMETERS_FILE = PROJECT_ROOT / "data" / "quantum_optimizer_p2_refined_parameters.csv"
 
 PORTFOLIO_SIZE = 4
-DEPTH_SCHEDULE = (1,)  # Keep p=1 first for a controlled comparison.
-OPTIMIZER_RESTARTS = 5
-MAX_ITERATIONS_PER_RESTART = 40
-RANDOM_SEED = 2026
+DEPTH_SCHEDULE = (2,)  # Experiment: deeper circuit than the p=1 baseline.
+OPTIMIZER_RESTARTS = 10
+MAX_ITERATIONS_PER_RESTART = 180
+RANDOM_SEED = 2029
 OPTIMIZER_METHOD = "COBYLA"
+INITIAL_TRUST_REGION = 0.25
+OPTIMIZER_TOLERANCE = 1e-2
 
 _XY_GATE_INDEX_CACHE: dict[int, list[tuple[np.ndarray, np.ndarray]]] = {}
 
@@ -156,24 +160,47 @@ def optimize_depth(
     for restart in range(OPTIMIZER_RESTARTS):
         x0 = rng.uniform(-np.pi, np.pi, size=2 * depth)
 
+        objective_history = []
+
         def objective(x):
             probabilities = simulate_qaoa(
                 x, asset_count, feasible_indices, scaled_costs, depth
             )
-            return float(np.dot(probabilities, scaled_costs))
+            value = float(np.dot(probabilities, scaled_costs))
+            objective_history.append(value)
+            return value
 
         result = minimize(
             objective,
             x0,
             method=OPTIMIZER_METHOD,
-            options={"maxiter": MAX_ITERATIONS_PER_RESTART, "rhobeg": 0.5, "tol": 1e-3},
+            options={
+                "maxiter": MAX_ITERATIONS_PER_RESTART,
+                "rhobeg": INITIAL_TRUST_REGION,
+                "tol": OPTIMIZER_TOLERANCE,
+                "catol": 1e-6,
+            },
         )
+        initial_objective = objective_history[0] if objective_history else float("nan")
+        best_seen_objective = min(objective_history) if objective_history else float(result.fun)
+        final_window = objective_history[-min(10, len(objective_history)):]
+        final_window_range = (
+            float(max(final_window) - min(final_window)) if final_window else float("nan")
+        )
+        hit_eval_cap = int(getattr(result, "nfev", 0)) >= MAX_ITERATIONS_PER_RESTART
         nfev_total += int(getattr(result, "nfev", 0))
         records.append(
             {
                 "restart": restart + 1,
-                "objective_scaled": float(result.fun),
+                "depth": depth,
+                "restart": restart + 1,
+                "initial_objective_scaled": float(initial_objective),
+                "final_objective_scaled": float(result.fun),
+                "best_seen_objective_scaled": float(best_seen_objective),
+                "improvement": float(initial_objective - best_seen_objective),
+                "final_10_eval_range": final_window_range,
                 "nfev": int(getattr(result, "nfev", 0)),
+                "hit_eval_cap": bool(hit_eval_cap),
                 "success": bool(result.success),
                 "message": str(result.message),
             }
@@ -181,7 +208,9 @@ def optimize_depth(
         print(
             f"  start {restart + 1}/{OPTIMIZER_RESTARTS}: "
             f"scaled_objective={result.fun:.7f}, "
-            f"nfev={result.nfev}, success={result.success}"
+            f"nfev={result.nfev}, success={result.success}, "
+            f"improvement={initial_objective - best_seen_objective:.5g}, "
+            f"last10_range={final_window_range:.3g}, hit_cap={hit_eval_cap}"
         )
         if np.isfinite(result.fun) and result.fun < best_fun:
             best_fun = float(result.fun)
@@ -190,6 +219,79 @@ def optimize_depth(
     if best_x is None:
         raise RuntimeError("All optimizer restarts failed to produce a valid result.")
     return best_x, best_fun, nfev_total, records
+
+
+def refine_parameters(
+    initial_parameters: np.ndarray,
+    depth: int,
+    feasible_indices: np.ndarray,
+    scaled_costs: np.ndarray,
+    asset_count: int,
+):
+    """Refine the best multistart parameters using a smaller COBYLA trust region."""
+    history = []
+    history_parameters = []
+
+    def objective(x):
+        probabilities = simulate_qaoa(
+            x, asset_count, feasible_indices, scaled_costs, depth
+        )
+        value = float(np.dot(probabilities, scaled_costs))
+        history.append(value)
+        history_parameters.append(np.asarray(x, dtype=float).copy())
+        return value
+
+    initial_value = objective(initial_parameters)
+    result = minimize(
+        objective,
+        np.asarray(initial_parameters, dtype=float),
+        method="COBYLA",
+        options={
+            "maxiter": 250,
+            "rhobeg": 0.05,
+            "tol": 1e-3,
+            "catol": 1e-7,
+        },
+    )
+    best_seen = min(history) if history else float(result.fun)
+    final_window = history[-min(10, len(history)):]
+    final_range = float(max(final_window) - min(final_window)) if final_window else float("nan")
+    print("\\nLocal refinement")
+    print(f"  initial objective: {initial_value:.7f}")
+    print(f"  final objective:   {float(result.fun):.7f}")
+    print(f"  best seen:         {best_seen:.7f}")
+    print(f"  evaluations:       {int(getattr(result, 'nfev', 0))}")
+    print(f"  last-10 range:     {final_range:.6g}")
+    print(f"  success:           {bool(result.success)}")
+    print(f"  message:           {result.message}")
+
+    # Keep the best point encountered, and never replace the original with a worse point.
+    best_idx = int(np.argmin(history))
+    refined_parameters = history_parameters[best_idx]
+    refined_value = float(history[best_idx])
+    if refined_value >= initial_value:
+        return np.asarray(initial_parameters, dtype=float), initial_value, {
+            "stage": "refinement",
+            "initial_objective_scaled": initial_value,
+            "final_objective_scaled": float(result.fun),
+            "best_seen_objective_scaled": best_seen,
+            "nfev": int(getattr(result, "nfev", 0)),
+            "last_10_eval_range": final_range,
+            "success": bool(result.success),
+            "message": str(result.message),
+            "kept_refinement": False,
+        }
+    return refined_parameters, refined_value, {
+        "stage": "refinement",
+        "initial_objective_scaled": initial_value,
+        "final_objective_scaled": float(result.fun),
+        "best_seen_objective_scaled": best_seen,
+        "nfev": int(getattr(result, "nfev", 0)),
+        "last_10_eval_range": final_range,
+        "success": bool(result.success),
+        "message": str(result.message),
+        "kept_refinement": True,
+    }
 
 
 # --------------------------------- Main -------------------------------------
@@ -225,6 +327,7 @@ def main() -> None:
 
     rng = np.random.default_rng(RANDOM_SEED)
     all_rows = []
+    restart_log_rows = []
     nfev_total = 0
     opt_started = time.perf_counter()
 
@@ -234,6 +337,20 @@ def main() -> None:
             depth, feasible_indices, scaled_costs, n, rng
         )
         nfev_total += nfev
+        restart_log_rows.extend(records)
+
+        parameters, refined_objective, refinement_record = refine_parameters(
+            parameters, depth, feasible_indices, scaled_costs, n
+        )
+        nfev_total += int(refinement_record["nfev"])
+        restart_log_rows.append(refinement_record)
+        scaled_objective = refined_objective
+        PARAMETERS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame({
+            "parameter": [f"gamma_{i+1}" for i in range(depth)] + [f"beta_{i+1}" for i in range(depth)],
+            "value": parameters.tolist(),
+        }).to_csv(PARAMETERS_FILE, index=False)
+
         probabilities = simulate_qaoa(
             parameters, n, feasible_indices, scaled_costs, depth
         )
@@ -280,10 +397,13 @@ def main() -> None:
     opt_seconds = time.perf_counter() - opt_started
     RESULTS_FILE.parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(all_rows).to_csv(RESULTS_FILE, index=False)
+    pd.DataFrame(restart_log_rows).to_csv(RESTART_LOG_FILE, index=False)
     print(f"\nEvaluations: {nfev_total}")
     print(f"Optimization time: {opt_seconds:.2f}s")
     print(f"Total runtime: {time.perf_counter() - started:.2f}s")
-    print(f"Saved results to: {RESULTS_FILE}")
+    print(f"Saved portfolio distribution to: {RESULTS_FILE}")
+    print(f"Saved restart diagnostics to: {RESTART_LOG_FILE}")
+    print(f"Saved best parameters to: {PARAMETERS_FILE}")
 
 
 if __name__ == "__main__":

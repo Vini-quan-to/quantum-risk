@@ -25,14 +25,14 @@ from scipy.optimize import minimize
 
 # ----------------------------- Configuration -------------------------------
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parent
 RETURNS_FILE = PROJECT_ROOT / "data" / "daily_returns.csv"
 RESULTS_FILE = PROJECT_ROOT / "data" / "quantum_portfolio_results.csv"
 
 PORTFOLIO_SIZE = 4
-DEPTH_SCHEDULE = (1,)  # Keep p=1 first for a controlled comparison.
+DEPTH_SCHEDULE = (2,)  # Experiment: deeper circuit than the p=1 baseline.
 OPTIMIZER_RESTARTS = 5
-MAX_ITERATIONS_PER_RESTART = 40
+MAX_ITERATIONS_PER_RESTART = 120
 RANDOM_SEED = 2026
 OPTIMIZER_METHOD = "COBYLA"
 
