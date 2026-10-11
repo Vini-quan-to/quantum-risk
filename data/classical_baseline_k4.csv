@@ -1,0 +1,2 @@
+portfolio_size,selected_assets,equal_weight_variance,daily_volatility,annualized_volatility,portfolios_evaluated,method
+4,"XLP, HYG, LQD, AGG",1.3472809081414515e-05,0.003670532533763257,0.05826789758105622,4845,Exhaustive classical search

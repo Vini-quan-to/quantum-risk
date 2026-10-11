@@ -1,0 +1,6 @@
+restart,depth,initial_objective_scaled,final_objective_scaled,best_seen_objective_scaled,improvement,final_10_eval_range,nfev,hit_eval_cap,success,message
+1,2,2.6827669996947257,1.4525022035758632,1.4525022035758632,1.2302647961188624,0.0011987288222181647,138,False,True,Return from COBYLA because the trust region radius reaches its lower bound.
+2,2,2.762607068039835,1.6352010377001345,1.6352010377001345,1.1274060303397007,0.0016629022052274678,50,False,True,Return from COBYLA because the trust region radius reaches its lower bound.
+3,2,2.109835580426346,1.8089087589308637,1.8089087589308637,0.30092682149548233,0.0005157605518015806,79,False,True,Return from COBYLA because the trust region radius reaches its lower bound.
+4,2,2.2872797732950927,1.9417660167927282,1.9417660167927282,0.3455137565023645,0.0010252109797941333,48,False,True,Return from COBYLA because the trust region radius reaches its lower bound.
+5,2,2.401060916037888,1.9318380155437245,1.9318380155437245,0.4692229004941635,0.0007107553901282149,75,False,True,Return from COBYLA because the trust region radius reaches its lower bound.

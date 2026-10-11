@@ -1,0 +1,22 @@
+asset_count,portfolio_size,combination_count,synthetic_expansion_used,data_note,method,status,portfolio_assets,daily_variance,runtime_seconds,objective_evaluations,gap_vs_exact_percent,random_seed
+10,4,210,False,real dataset subset,exhaustive,completed,"SPY, TLT, GLD, XLF",4.525787550961792e-05,0.012927799998578848,210.0,0.0,
+10,4,210,False,real dataset subset,greedy_forward,completed,"SPY, TLT, GLD, XLF",4.525787550961792e-05,0.0029888999997638166,,0.0,
+10,4,210,False,real dataset subset,simulated_annealing,completed,"SPY, TLT, GLD, XLF",4.525787550961792e-05,0.7534149000020989,187.0,0.0,2071.0
+15,4,1365,False,real dataset subset,exhaustive,completed,"TLT, GLD, XLF, XLP",3.6865250074529546e-05,0.035352200000488665,1365.0,0.0,
+15,4,1365,False,real dataset subset,greedy_forward,completed,"SPY, TLT, GLD, XLP",3.712645428687983e-05,0.0015640999990864657,,0.7085377471255816,
+15,4,1365,False,real dataset subset,simulated_annealing,completed,"TLT, GLD, XLF, XLP",3.6865250074529546e-05,0.5077311000022746,868.0,0.0,2076.0
+20,4,4845,False,real dataset subset,exhaustive,completed,"XLP, HYG, LQD, AGG",1.3472809081414515e-05,0.09045940000214614,4845.0,0.0,
+20,4,4845,False,real dataset subset,greedy_forward,completed,"XLP, HYG, LQD, AGG",1.3472809081414515e-05,0.001776699999027187,,0.0,
+20,4,4845,False,real dataset subset,simulated_annealing,completed,"XLP, HYG, LQD, AGG",1.3472809081414515e-05,0.43739089999871794,1319.0,0.0,2081.0
+30,4,27405,True,synthetic stress test,exhaustive,completed,"XLP, HYG, LQD, AGG",1.3472809081414515e-05,0.4937192000033974,27405.0,0.0,
+30,4,27405,True,synthetic stress test,greedy_forward,completed,"XLP, HYG, LQD, AGG",1.3472809081414515e-05,0.003357600002345862,,0.0,
+30,4,27405,True,synthetic stress test,simulated_annealing,completed,"XLP, HYG, LQD, AGG",1.3472809081414515e-05,0.5077348000013444,3345.0,0.0,2091.0
+40,4,91390,True,synthetic stress test,exhaustive,completed,"HYG, AGG, SYN_35_from_HYG, SYN_37_from_AGG",8.532824606062592e-06,1.6480426999987685,91390.0,0.0,
+40,4,91390,True,synthetic stress test,greedy_forward,completed,"HYG, AGG, SYN_35_from_HYG, SYN_37_from_AGG",8.532824606062592e-06,0.003410100001929095,,0.0,
+40,4,91390,True,synthetic stress test,simulated_annealing,completed,"HYG, AGG, SYN_35_from_HYG, SYN_37_from_AGG",8.532824606062592e-06,0.5432087000008323,3980.0,0.0,2101.0
+50,4,230300,True,synthetic stress test,exhaustive,completed,"HYG, LQD, AGG, SYN_21_from_HYG",1.0170621049983683e-05,4.852668399998947,230300.0,0.0,
+50,4,230300,True,synthetic stress test,greedy_forward,completed,"HYG, LQD, AGG, SYN_21_from_HYG",1.0170621049983681e-05,0.0035480000005918555,,-2.220446049250313e-14,
+50,4,230300,True,synthetic stress test,simulated_annealing,completed,"HYG, LQD, AGG, SYN_21_from_HYG",1.0170621049983683e-05,0.5757120999987819,4972.0,0.0,2111.0
+60,4,487635,True,synthetic stress test,exhaustive,skipped_combination_limit,,,,,,
+60,4,487635,True,synthetic stress test,greedy_forward,completed,"HYG, AGG, SYN_25_from_HYG, SYN_32_from_AGG",8.086913072902932e-06,0.004516400000284193,,,
+60,4,487635,True,synthetic stress test,simulated_annealing,completed,"HYG, AGG, SYN_25_from_HYG, SYN_32_from_AGG",8.086913072902932e-06,0.6390743000010843,6514.0,,2121.0

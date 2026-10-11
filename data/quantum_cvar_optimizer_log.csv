@@ -1,0 +1,7 @@
+stage,restart,depth,initial_objective_scaled,final_objective_scaled,best_seen_objective_scaled,improvement,last_10_eval_range,nfev,hit_eval_cap,success,message,kept_refinement
+restart,1,2,2.594859123071079,2.1902356177852185,2.1902356177852185,0.40462350528586066,0.005023039035957133,38,False,True,Return from COBYLA because the trust region radius reaches its lower bound.,
+restart,2,2,2.6829168735621485,2.2788278757408498,2.2788278757408498,0.4040889978212987,0.010236990641123711,80,True,False,Return from COBYLA because the objective function has been evaluated MAXFUN times.,
+restart,3,2,2.8253471367609464,2.2968965780739783,2.2968965780739783,0.5284505586869681,0.007322596353848354,80,True,False,Return from COBYLA because the objective function has been evaluated MAXFUN times.,
+restart,4,2,3.1768068527030406,1.976552899243092,1.976552899243092,1.2002539534599486,0.002047772485121113,66,False,True,Return from COBYLA because the trust region radius reaches its lower bound.,
+restart,5,2,2.7862377282780995,2.233416513626315,2.233416513626315,0.5528212146517846,0.0018324018837727607,80,True,False,Return from COBYLA because the objective function has been evaluated MAXFUN times.,
+refinement,0,2,1.976552899243092,1.9735348246542732,1.9735348246542732,0.0030180745888188643,1.5759765507050716e-05,91,False,True,Return from COBYLA because the trust region radius reaches its lower bound.,True

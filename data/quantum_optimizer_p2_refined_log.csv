@@ -1,0 +1,12 @@
+restart,depth,initial_objective_scaled,final_objective_scaled,best_seen_objective_scaled,improvement,final_10_eval_range,nfev,hit_eval_cap,success,message,stage,last_10_eval_range,kept_refinement
+1.0,2.0,2.5050630768227755,1.4515044109808461,1.4515044109808461,1.0535586658419294,0.003380570592627974,180,True,False,Return from COBYLA because the objective function has been evaluated MAXFUN times.,,,
+2.0,2.0,2.3165894905577082,1.936907662840861,1.936907662840861,0.3796818277168472,0.00031445239756910937,82,False,True,Return from COBYLA because the trust region radius reaches its lower bound.,,,
+3.0,2.0,2.5408151272752866,1.5643890294062055,1.5643890294062055,0.9764260978690811,0.0018435278168789093,59,False,True,Return from COBYLA because the trust region radius reaches its lower bound.,,,
+4.0,2.0,2.231606019455035,1.948290328608659,1.948290328608659,0.2833156908463761,0.000730925212268696,78,False,True,Return from COBYLA because the trust region radius reaches its lower bound.,,,
+5.0,2.0,1.8198683072917528,1.6806977014360638,1.6806977014360638,0.13917060585568897,0.0010242612142592478,171,False,True,Return from COBYLA because the trust region radius reaches its lower bound.,,,
+6.0,2.0,2.0862812943243196,1.4630025648636247,1.4630025648636247,0.623278729460695,0.0009306972454694584,76,False,True,Return from COBYLA because the trust region radius reaches its lower bound.,,,
+7.0,2.0,2.034408429592925,1.561639907433029,1.561639907433029,0.47276852215989584,0.0004925071585937246,174,False,True,Return from COBYLA because the trust region radius reaches its lower bound.,,,
+8.0,2.0,2.634246142131867,1.511734642356994,1.511734642356994,1.1225114997748729,0.0006377855011470146,67,False,True,Return from COBYLA because the trust region radius reaches its lower bound.,,,
+9.0,2.0,1.6984090817434643,1.5614323806921784,1.5614323806921784,0.1369767010512859,0.0035471946669829446,89,False,True,Return from COBYLA because the trust region radius reaches its lower bound.,,,
+10.0,2.0,2.1822385635431734,1.6771507465501505,1.6771507465501505,0.5050878169930229,0.0011701466562354934,40,False,True,Return from COBYLA because the trust region radius reaches its lower bound.,,,
+,,1.4515044109808461,1.4424730894720181,1.4424730894720181,,,183,,True,Return from COBYLA because the trust region radius reaches its lower bound.,refinement,6.111409300912918e-05,True

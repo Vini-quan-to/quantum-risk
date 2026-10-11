@@ -1,0 +1,5 @@
+experiment,source_file,portfolio,probability,daily_variance,historical_var_loss,historical_cvar_loss,portfolio_rank,expected_daily_variance,expected_cvar_loss,notes
+Classical minimum variance,classical_k4_results.csv,"XLP, HYG, LQD, AGG",,1.3472809081414515e-05,0.0058845332079261,0.0081087264926687,,,,Minimum variance in classical_k4_results.csv.
+Classical minimum CVaR,classical_cvar_results.csv,"XLP, HYG, LQD, AGG",,1.3472809081414515e-05,0.0058845332079261,0.0081087264926687,1.0,,,Minimum cvar in classical_cvar_results.csv.
+Quantum variance simulation (modal),quantum_portfolio_results_p2_refined.csv,"EFA, TLT, HYG, AGG",0.004007234849898042,2.3795067880664236e-05,,,,4.363443702407466e-05,,Modal portfolio; expected metrics use normalized CSV probabilities.
+Quantum CVaR simulation (modal),quantum_cvar_portfolio_results.csv,"EFA, TLT, USO, XLP",0.005139910282893397,4.445076483025994e-05,0.0092090290800218,0.013151421609685,,4.388131597974902e-05,0.014117681645334773,Modal portfolio; expected metrics use normalized CSV probabilities.
